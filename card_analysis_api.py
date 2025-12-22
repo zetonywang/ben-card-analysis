@@ -17,6 +17,20 @@ import asyncio
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# CRITICAL: Block DDS from being imported to prevent libdds.so errors
+# Create a fake dds module that raises an error if accessed
+class FakeDDS:
+    def __getattr__(self, name):
+        logger.warning(f"Attempted to access DDS.{name} - DDS is disabled")
+        return None
+    def __call__(self, *args, **kwargs):
+        logger.warning("Attempted to call DDS - DDS is disabled")
+        return None
+
+# Block the 'dds' module from being imported
+if 'dds' not in sys.modules:
+    sys.modules['dds'] = FakeDDS()
+
 models = None
 sampler = None
 CardByCard = None
@@ -26,6 +40,9 @@ app_state = {'ready': False, 'error': None}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global models, sampler, CardByCard, app_state
+    
+    # Set environment variable to disable DDS
+    os.environ['BEN_DISABLE_DDS'] = '1'
     
     logger.info("🔄 Loading Ben bridge models...")
     
@@ -188,20 +205,44 @@ async def analyze_deal(request: DealAnalysisRequest):
             raise HTTPException(status_code=400, detail="vuln must be [NS, EW]")
         
         # Create CardByCard analyzer
-        card_by_card = CardByCard(
-            request.dealer,
-            request.vuln,
-            request.hands,
-            request.auction,
-            request.play,
-            models,
-            sampler,
-            False  # verbose
-        )
+        # Pass ddsolver=None explicitly to prevent DDS usage
+        try:
+            card_by_card = CardByCard(
+                request.dealer,
+                request.vuln,
+                request.hands,
+                request.auction,
+                request.play,
+                models,
+                sampler,
+                False,  # verbose
+                ddsolver=None  # Explicitly disable DDS
+            )
+        except TypeError:
+            # If ddsolver parameter doesn't exist, try without it
+            card_by_card = CardByCard(
+                request.dealer,
+                request.vuln,
+                request.hands,
+                request.auction,
+                request.play,
+                models,
+                sampler,
+                False  # verbose
+            )
         
         # Run the analysis (this is async in Ben)
         logger.info("⏳ Analyzing (this may take 30-60 seconds)...")
-        await card_by_card.analyze()
+        try:
+            await card_by_card.analyze()
+        except Exception as e:
+            if "libdds" in str(e):
+                logger.error(f"DDS error occurred: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail="DDS library not available. Please ensure DDS is disabled in the configuration."
+                )
+            raise
         logger.info("✅ Analysis complete!")
         
         # Parse contract
