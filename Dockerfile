@@ -38,7 +38,7 @@ RUN pip install --no-cache-dir \
     colorama \
     tqdm \
     dill \
-    keras
+    keras==3.6.0
 
 # Copy API file
 COPY card_analysis_api.py /app/ben/card_analysis_api.py
