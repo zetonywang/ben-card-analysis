@@ -62,6 +62,11 @@ async def lifespan(app: FastAPI):
         models.pimc_use_declaring = False
         models.pimc_use_defending = False
         
+        # Disable DDS (double-dummy solver) - not available in container
+        models.use_dds = False
+        models.dds_use_declaring = False
+        models.dds_use_defending = False
+        
         app_state['ready'] = True
         logger.info("✅ Models loaded and ready!")
         
