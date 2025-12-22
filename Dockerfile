@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
 RUN echo '#include <stdio.h>\n\
 void SetMaxThreads(int n) { printf("DDS stub: SetMaxThreads called\\n"); }\n\
 void SetResources(int maxMemoryMB, int maxThreads) { printf("DDS stub: SetResources called\\n"); }\n\
+void FreeMemory() { printf("DDS stub: FreeMemory called\\n"); }\n\
 int SolveBoard(void* dl, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
 int SolveBoardPBN(void* dlPBN, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
 int CalcDDtable(void* tableDeal, void* table) { return -1; }\n\
@@ -26,7 +27,14 @@ void DDS_Version() { printf("DDS stub version\\n"); }\n\
 int AnalysePlayBin(void* dl, void* play, void* solved, int thrId) { return -1; }\n\
 int AnalysePlayPBN(void* dlPBN, void* playPBN, void* solvedPlay, int thrId) { return -1; }\n\
 int AnalyseAllPlaysBin(void* dl, void* play, void* solved, int chunkSize) { return -1; }\n\
-int AnalyseAllPlaysPBN(void* dlPBN, void* playPBN, void* solvedp, int chunkSize) { return -1; }' > /tmp/stub.c && \
+int AnalyseAllPlaysPBN(void* dlPBN, void* playPBN, void* solvedp, int chunkSize) { return -1; }\n\
+void ErrorMessage(int code, char* msg) { sprintf(msg, "DDS stub error %d", code); }\n\
+int Par(void* tablep, void* presp, int vulnerable) { return -1; }\n\
+int DealerPar(void* tablep, void* presp, int dealer, int vulnerable) { return -1; }\n\
+int SidesParBin(void* tablep, void* sidesRes, int vulnerable) { return -1; }\n\
+int SidesPar(void* tablep, void* sidesRes, int vulnerable) { return -1; }\n\
+int CalcPar(void* tableDeal, int vulnerable, void* resp) { return -1; }\n\
+int CalcParPBN(void* tableDealPBN, void* tablep, int vulnerable, void* resp) { return -1; }' > /tmp/stub.c && \
     gcc -shared -fPIC -o /usr/local/lib/libdds.so /tmp/stub.c && \
     rm /tmp/stub.c && \
     ldconfig
