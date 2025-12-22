@@ -28,7 +28,8 @@ RUN git clone https://github.com/lorserker/ben.git && \
 
 # Install Python dependencies from Ben
 RUN pip install --no-cache-dir \
-    tensorflow==2.15.0 \
+    tensorflow==2.17.0 \
+    keras==3.6.0 \
     numpy \
     scipy \
     scikit-learn \
@@ -37,8 +38,7 @@ RUN pip install --no-cache-dir \
     pydantic \
     colorama \
     tqdm \
-    dill \
-    keras==3.6.0
+    dill
 
 # Copy API file
 COPY card_analysis_api.py /app/ben/card_analysis_api.py
