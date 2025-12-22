@@ -11,9 +11,22 @@ RUN apt-get update && apt-get install -y \
     gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a stub libdds.so to prevent import errors
-# This is just an empty shared library that does nothing
-RUN echo 'void DDS_Version() {}' > /tmp/stub.c && \
+# Create a comprehensive stub libdds.so with all DDS functions
+# This prevents import errors and provides stub implementations
+RUN echo '#include <stdio.h>\n\
+void SetMaxThreads(int n) { printf("DDS stub: SetMaxThreads called\\n"); }\n\
+void SetResources(int maxMemoryMB, int maxThreads) { printf("DDS stub: SetResources called\\n"); }\n\
+int SolveBoard(void* dl, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
+int SolveBoardPBN(void* dlPBN, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
+int CalcDDtable(void* tableDeal, void* table) { return -1; }\n\
+int CalcDDtablePBN(void* tableDealPBN, void* table) { return -1; }\n\
+int CalcAllTables(void* dealsp, int mode, int trumpFilter[5], void* resp, void* presp) { return -1; }\n\
+int CalcAllTablesPBN(void* dealsp, int mode, int trumpFilter[5], void* resp, void* presp) { return -1; }\n\
+void DDS_Version() { printf("DDS stub version\\n"); }\n\
+int AnalysePlayBin(void* dl, void* play, void* solved, int thrId) { return -1; }\n\
+int AnalysePlayPBN(void* dlPBN, void* playPBN, void* solvedPlay, int thrId) { return -1; }\n\
+int AnalyseAllPlaysBin(void* dl, void* play, void* solved, int chunkSize) { return -1; }\n\
+int AnalyseAllPlaysPBN(void* dlPBN, void* playPBN, void* solvedp, int chunkSize) { return -1; }' > /tmp/stub.c && \
     gcc -shared -fPIC -o /usr/local/lib/libdds.so /tmp/stub.c && \
     rm /tmp/stub.c && \
     ldconfig
