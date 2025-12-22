@@ -205,31 +205,17 @@ async def analyze_deal(request: DealAnalysisRequest):
             raise HTTPException(status_code=400, detail="vuln must be [NS, EW]")
         
         # Create CardByCard analyzer
-        # Pass ddsolver=None explicitly to prevent DDS usage
-        try:
-            card_by_card = CardByCard(
-                request.dealer,
-                request.vuln,
-                request.hands,
-                request.auction,
-                request.play,
-                models,
-                sampler,
-                False,  # verbose
-                ddsolver=None  # Explicitly disable DDS
-            )
-        except TypeError:
-            # If ddsolver parameter doesn't exist, try without it
-            card_by_card = CardByCard(
-                request.dealer,
-                request.vuln,
-                request.hands,
-                request.auction,
-                request.play,
-                models,
-                sampler,
-                False  # verbose
-            )
+        # Note: CardByCard doesn't accept ddsolver parameter - DDS is handled by stub library
+        card_by_card = CardByCard(
+            request.dealer,
+            request.vuln,
+            request.hands,
+            request.auction,
+            request.play,
+            models,
+            sampler,
+            False  # verbose
+        )
         
         # Run the analysis (this is async in Ben)
         logger.info("⏳ Analyzing (this may take 30-60 seconds)...")
