@@ -34,7 +34,11 @@ RUN pip install --no-cache-dir \
     scikit-learn \
     fastapi \
     uvicorn \
-    pydantic
+    pydantic \
+    colorama \
+    tqdm \
+    dill \
+    keras
 
 # Copy API file
 COPY card_analysis_api.py /app/ben/card_analysis_api.py
