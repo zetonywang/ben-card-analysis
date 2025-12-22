@@ -1,50 +1,52 @@
-FROM python:3.9-slim
+# Use Python 3.11 slim image
+FROM python:3.11-slim
 
-# Install system dependencies INCLUDING git-lfs for large model files
+# Set working directory
+WORKDIR /app
+
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
     git-lfs \
-    wget \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
+
+# Create a stub libdds.so to prevent import errors
+# This is just an empty shared library that does nothing
+RUN echo 'void DDS_Version() {}' > /tmp/stub.c && \
+    gcc -shared -fPIC -o /usr/local/lib/libdds.so /tmp/stub.c && \
+    rm /tmp/stub.c && \
+    ldconfig
 
 # Initialize Git LFS
 RUN git lfs install
 
-WORKDIR /app
+# Clone Ben repository with LFS files
+RUN git clone https://github.com/lorserker/ben.git && \
+    cd ben && \
+    git lfs pull
 
-# Clone Ben repository WITH LFS (downloads model files)
-RUN git clone https://github.com/lorserker/ben.git /app/ben
-
-# Verify the model file was downloaded
-RUN ls -lh /app/ben/models/TF2models/ && \
-    echo "Checking model file..." && \
-    if [ -f "/app/ben/models/TF2models/GIB-BBO-8730_2025-04-19-E30.keras" ]; then \
-        echo "✅ Model file found!"; \
-    else \
-        echo "❌ Model file NOT found - might need Git LFS"; \
-        exit 1; \
-    fi
-
-# Install Ben dependencies
-WORKDIR /app/ben
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir colorama
-
-# Install API dependencies
+# Install Python dependencies from Ben
 RUN pip install --no-cache-dir \
-    fastapi==0.104.1 \
-    uvicorn[standard]==0.24.0 \
-    pydantic==2.5.0
+    tensorflow==2.15.0 \
+    numpy \
+    scipy \
+    scikit-learn \
+    fastapi \
+    uvicorn \
+    pydantic
 
 # Copy API file
 COPY card_analysis_api.py /app/ben/card_analysis_api.py
 
-# Set working directory
+# Set working directory to ben
 WORKDIR /app/ben
 
 # Expose port
 EXPOSE 8000
 
-# Start the API
+# Set Python path
+ENV PYTHONPATH=/app/ben/src:$PYTHONPATH
+
+# Run the API
 CMD sh -c "uvicorn card_analysis_api:app --host 0.0.0.0 --port ${PORT:-8000}"
