@@ -19,6 +19,10 @@ void SetResources(int maxMemoryMB, int maxThreads) { printf("DDS stub: SetResour
 void FreeMemory() { printf("DDS stub: FreeMemory called\\n"); }\n\
 int SolveBoard(void* dl, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
 int SolveBoardPBN(void* dlPBN, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
+int SolveAllBoards(void* bop, void* solvedBoards) { return -1; }\n\
+int SolveAllChunks(void* bop, void* solvedBoards, int chunkSize) { return -1; }\n\
+int SolveAllChunksBin(void* bop, void* solvedBoards, int chunkSize) { return -1; }\n\
+int SolveAllChunksPBN(void* bop, void* solvedBoards, int chunkSize) { return -1; }\n\
 int CalcDDtable(void* tableDeal, void* table) { return -1; }\n\
 int CalcDDtablePBN(void* tableDealPBN, void* table) { return -1; }\n\
 int CalcAllTables(void* dealsp, int mode, int trumpFilter[5], void* resp, void* presp) { return -1; }\n\
