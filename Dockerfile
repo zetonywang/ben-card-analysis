@@ -67,6 +67,10 @@ RUN sed -i 's/consult_bba = True/consult_bba = False/g' /app/ben/src/config/defa
     echo "" >> /app/ben/src/config/default.conf && \
     echo "consult_bba = False" >> /app/ben/src/config/default.conf
 
+# Copy and run the BBA patch script
+COPY patch_bba.py /app/patch_bba.py
+RUN python3 /app/patch_bba.py
+
 # Install Python dependencies from Ben
 RUN pip install --no-cache-dir \
     tensorflow==2.17.0 \
