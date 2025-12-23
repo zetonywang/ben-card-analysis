@@ -89,43 +89,48 @@ def BBA_PLAYER(*a, **k):
     sample_py = 'sample.py'
     if os.path.exists(sample_py):
         with open(sample_py, 'r') as f:
-            content = f.read()
+            lines = f.readlines()
         
-        replacements = [
-            ('aceking.items()', '(aceking or {}).items()'),
-            ('aceking.keys()', '(aceking or {}).keys()'),
-            ('aceking.values()', '(aceking or {}).values()'),
-            ('len(aceking)', 'len(aceking or {})'),
-            ('aceking[', '(aceking or {})['),
-            (', aceking)', ', (aceking or {}))'),
-            (', aceking,', ', (aceking or {}),'),
-        ]
-        
-        for old, new in replacements:
-            content = content.replace(old, new)
+        new_lines = []
+        for line in lines:
+            # Skip function definitions - don't modify parameter names
+            if 'def ' in line:
+                new_lines.append(line)
+                continue
+            
+            # Only modify non-def lines
+            line = line.replace('aceking.items()', '(aceking or {}).items()')
+            line = line.replace('aceking.keys()', '(aceking or {}).keys()')
+            line = line.replace('aceking.values()', '(aceking or {}).values()')
+            line = line.replace('len(aceking)', 'len(aceking or {})')
+            # Be careful with subscript - only if followed by [ not in def
+            if 'aceking[' in line:
+                line = line.replace('aceking[', '(aceking or {})[')
+            new_lines.append(line)
         
         with open(sample_py, 'w') as f:
-            f.write(content)
+            f.writelines(new_lines)
     
     # 4. Patch botbidder.py for aceking safety
     botbidder_py = 'botbidder.py'
     if os.path.exists(botbidder_py):
         with open(botbidder_py, 'r') as f:
-            content = f.read()
+            lines = f.readlines()
         
-        replacements = [
-            ('aceking.items()', '(aceking or {}).items()'),
-            ('aceking.keys()', '(aceking or {}).keys()'),
-            ('len(aceking)', 'len(aceking or {})'),
-            (', aceking)', ', (aceking or {}))'),
-            (', aceking,', ', (aceking or {}),'),
-        ]
-        
-        for old, new in replacements:
-            content = content.replace(old, new)
+        new_lines = []
+        for line in lines:
+            # Skip function definitions
+            if 'def ' in line:
+                new_lines.append(line)
+                continue
+            
+            line = line.replace('aceking.items()', '(aceking or {}).items()')
+            line = line.replace('aceking.keys()', '(aceking or {}).keys()')
+            line = line.replace('len(aceking)', 'len(aceking or {})')
+            new_lines.append(line)
         
         with open(botbidder_py, 'w') as f:
-            f.write(content)
+            f.writelines(new_lines)
     
     # 5. Disable BBA in config
     config = 'config/default.conf'
