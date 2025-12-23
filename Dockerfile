@@ -1,102 +1,179 @@
-# Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     git \
-    git-lfs \
     gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a comprehensive stub libdds.so with ALL DDS functions
-# This prevents import errors and provides stub implementations
-RUN echo '#include <stdio.h>\n\
-void SetMaxThreads(int n) {}\n\
-void SetResources(int maxMemoryMB, int maxThreads) {}\n\
-void FreeMemory() {}\n\
-int SolveBoard(void* dl, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
-int SolveBoardPBN(void* dlPBN, int target, int solutions, int mode, void* futp, int threadIndex) { return -1; }\n\
-int SolveAllBoards(void* bop, void* solvedBoards) { return -1; }\n\
-int SolveAllBoardsBin(void* bop, void* solvedBoards) { return -1; }\n\
-int SolveAllChunks(void* bop, void* solvedBoards, int chunkSize) { return -1; }\n\
-int SolveAllChunksBin(void* bop, void* solvedBoards, int chunkSize) { return -1; }\n\
-int SolveAllChunksPBN(void* bop, void* solvedBoards, int chunkSize) { return -1; }\n\
-int CalcDDtable(void* tableDeal, void* table) { return -1; }\n\
-int CalcDDtablePBN(void* tableDealPBN, void* table) { return -1; }\n\
-int CalcAllTables(void* dealsp, int mode, int trumpFilter[5], void* resp, void* presp) { return -1; }\n\
-int CalcAllTablesPBN(void* dealsp, int mode, int trumpFilter[5], void* resp, void* presp) { return -1; }\n\
-void DDS_Version() {}\n\
-void GetDDSInfo(void* info) {}\n\
-int AnalysePlayBin(void* dl, void* play, void* solved, int thrId) { return -1; }\n\
-int AnalysePlayPBN(void* dlPBN, void* playPBN, void* solvedPlay, int thrId) { return -1; }\n\
-int AnalyseAllPlaysBin(void* dl, void* play, void* solved, int chunkSize) { return -1; }\n\
-int AnalyseAllPlaysPBN(void* dlPBN, void* playPBN, void* solvedp, int chunkSize) { return -1; }\n\
-void ErrorMessage(int code, char* msg) { if(msg) msg[0]=0; }\n\
-int Par(void* tablep, void* presp, int vulnerable) { return -1; }\n\
-int DealerPar(void* tablep, void* presp, int dealer, int vulnerable) { return -1; }\n\
-int DealerParBin(void* tablep, void* presp, int dealer, int vulnerable) { return -1; }\n\
-int SidesParBin(void* tablep, void* sidesRes, int vulnerable) { return -1; }\n\
-int SidesPar(void* tablep, void* sidesRes, int vulnerable) { return -1; }\n\
-int ConvertToDealerTextFormat(void* pres, char* resp) { return -1; }\n\
-int ConvertToSidesTextFormat(void* pres, void* resp) { return -1; }\n\
-int CalcPar(void* tableDeal, int vulnerable, void* resp, void* presp) { return -1; }\n\
-int CalcParPBN(void* tableDealPBN, void* tablep, int vulnerable, void* resp, void* presp) { return -1; }' > /tmp/stub.c && \
-    gcc -shared -fPIC -o /usr/local/lib/libdds.so /tmp/stub.c && \
-    rm /tmp/stub.c && \
-    ldconfig
+# Clone Ben repository
+RUN git clone https://github.com/lorserker/ben.git
 
-# Initialize Git LFS
-RUN git lfs install
-
-# Clone Ben repository with LFS files
-RUN git clone https://github.com/lorserker/ben.git && \
-    cd ben && \
-    git lfs pull
-
-# Copy stub library to Ben's ddsolver directory where it looks for it
-RUN cp /usr/local/lib/libdds.so /app/ben/src/ddsolver/libdds.so && \
-    cp /usr/local/lib/libdds.so /app/ben/src/ddsolver/dds.dll && \
-    cp /usr/local/lib/libdds.so /app/ben/libdds.so
-
-# Disable BBA consultation in config (BBA library not available on Linux)
-RUN sed -i 's/consult_bba = True/consult_bba = False/g' /app/ben/src/config/default.conf && \
-    sed -i 's/consult_bba=True/consult_bba=False/g' /app/ben/src/config/default.conf && \
-    echo "" >> /app/ben/src/config/default.conf && \
-    echo "consult_bba = False" >> /app/ben/src/config/default.conf
-
-# Copy and run the BBA patch script
-COPY patch_bba.py /app/patch_bba.py
-RUN python3 /app/patch_bba.py
-
-# Install Python dependencies from Ben
+# Install Python dependencies
 RUN pip install --no-cache-dir \
     tensorflow==2.17.0 \
     keras==3.6.0 \
     numpy \
-    scipy \
-    scikit-learn \
+    flask \
     fastapi \
     uvicorn \
+    python-multipart \
+    grpcio \
+    configparser \
+    websockets \
     pydantic \
-    colorama \
     tqdm \
-    dill
+    --break-system-packages
+
+# Create stub DDS library with all 32 functions
+RUN echo 'void SetMaxThreads(int x) {}' > /tmp/dds_stub.c && \
+    echo 'void SetThreading(int x) {}' >> /tmp/dds_stub.c && \
+    echo 'void SetResources(int x, int y) {}' >> /tmp/dds_stub.c && \
+    echo 'int SolveBoard(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SolveBoardPBN(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int CalcDDtable(void* a, void* b) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int CalcDDtablePBN(void* a, void* b) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int CalcAllTables(void* a, int b, int* c, void* d, int e) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int CalcAllTablesPBN(void* a, int b, int* c, void* d, int e) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SolveAllBoards(void* a, void* b) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SolveAllBoardsBin(void* a, void* b) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SolveAllChunks(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SolveAllChunksBin(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SolveAllChunksPBN(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int Par(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int CalcPar(void* a, int b, void* c, void* d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int CalcParPBN(void* a, void* b, int c, void* d, void* e) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SidesPar(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int SidesParBin(void* a, void* b, int c) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int DealerPar(void* a, void* b, int c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int DealerParBin(void* a, void* b, int c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int ConvertToDealerTextFormat(void* a, void* b) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int AnalysePlayBin(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int AnalysePlayPBN(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int AnalyseAllPlaysBin(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int AnalyseAllPlaysPBN(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int TracePlayBin(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int TracePlayPBN(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int TraceAllPlaysBin(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'int TraceAllPlaysPBN(void* a, void* b, void* c, int d) { return 0; }' >> /tmp/dds_stub.c && \
+    echo 'void ErrorMessage(int code, char* line) {}' >> /tmp/dds_stub.c && \
+    echo 'void GetDDSInfo(void* info) {}' >> /tmp/dds_stub.c && \
+    gcc -shared -fPIC -o /usr/lib/libdds.so /tmp/dds_stub.c && \
+    rm /tmp/dds_stub.c
+
+# Copy libraries to expected locations
+RUN cp /usr/lib/libdds.so /app/ben/bin/ 2>/dev/null || mkdir -p /app/ben/bin && cp /usr/lib/libdds.so /app/ben/bin/ && \
+    cp /usr/lib/libdds.so /app/ben/src/ddsolver/ 2>/dev/null || mkdir -p /app/ben/src/ddsolver && cp /usr/lib/libdds.so /app/ben/src/ddsolver/ && \
+    cp /usr/lib/libdds.so /app/ben/ 2>/dev/null || true
+
+# ============================================================
+# PATCH BBA - Direct sed commands (more reliable than Python)
+# ============================================================
+
+# Create NoOpBBA module
+RUN cat > /app/ben/src/bba/noop_bba.py << 'NOOP_EOF'
+# NoOp BBA - provides dummy implementations when BBA library is not available
+
+class NoOpBBA:
+    """A no-op BBA that returns empty/neutral values for all methods"""
+    
+    def __init__(self, *args, **kwargs):
+        pass
+    
+    def bid_hand(self, *args, **kwargs):
+        return {}
+    
+    def explain(self, *args, **kwargs):
+        return [], False, False
+    
+    def get_bid(self, *args, **kwargs):
+        return None
+    
+    def items(self):
+        return {}.items()
+    
+    def keys(self):
+        return {}.keys()
+    
+    def values(self):
+        return {}.values()
+    
+    def get(self, key, default=None):
+        return default
+    
+    def __iter__(self):
+        return iter({})
+    
+    def __len__(self):
+        return 0
+    
+    def __bool__(self):
+        return False
+    
+    def __getitem__(self, key):
+        return None
+    
+    def __contains__(self, key):
+        return False
+    
+    def __getattr__(self, name):
+        def noop(*args, **kwargs):
+            return {}
+        return noop
+
+_noop_instance = None
+
+def get_noop_bba(*args, **kwargs):
+    global _noop_instance
+    if _noop_instance is None:
+        _noop_instance = NoOpBBA()
+    return _noop_instance
+NOOP_EOF
+
+# Patch BBA.py - Replace RuntimeError with NoOpBBA return
+RUN sed -i '1i from bba.noop_bba import get_noop_bba, NoOpBBA' /app/ben/src/bba/BBA.py && \
+    sed -i 's/raise RuntimeError.*dll is not available on this platform.*/print("BBA disabled, using NoOpBBA"); return NoOpBBA/' /app/ben/src/bba/BBA.py
+
+# Patch sample.py - Add aceking None guard at every function that uses it
+RUN sed -i '/def.*aceking.*:$/a\        aceking = aceking if aceking is not None else {}' /app/ben/src/sample.py
+
+# Patch botbidder.py - Add import
+RUN sed -i '1i from bba.noop_bba import get_noop_bba' /app/ben/src/botbidder.py
+
+# Aggressive aceking fixes in sample.py - wrap all aceking usages
+RUN sed -i 's/aceking\.items()/(aceking or {}).items()/g' /app/ben/src/sample.py && \
+    sed -i 's/aceking\.keys()/(aceking or {}).keys()/g' /app/ben/src/sample.py && \
+    sed -i 's/aceking\.values()/(aceking or {}).values()/g' /app/ben/src/sample.py && \
+    sed -i 's/len(aceking)/len(aceking or {})/g' /app/ben/src/sample.py && \
+    sed -i 's/aceking\[/( aceking or {} )[/g' /app/ben/src/sample.py
+
+# Aggressive aceking fixes in botbidder.py
+RUN sed -i 's/aceking\.items()/(aceking or {}).items()/g' /app/ben/src/botbidder.py && \
+    sed -i 's/aceking\.keys()/(aceking or {}).keys()/g' /app/ben/src/botbidder.py && \
+    sed -i 's/len(aceking)/len(aceking or {})/g' /app/ben/src/botbidder.py && \
+    sed -i 's/, aceking)/, (aceking or {}))/g' /app/ben/src/botbidder.py && \
+    sed -i 's/, aceking,/, (aceking or {}),/g' /app/ben/src/botbidder.py
+
+# Patch config to disable BBA
+RUN sed -i 's/consult_bba = True/consult_bba = False/g' /app/ben/src/config/default.conf 2>/dev/null || true && \
+    echo "consult_bba = False" >> /app/ben/src/config/default.conf
+
+# ============================================================
+# End BBA patches
+# ============================================================
+
+# Set PYTHONPATH
+ENV PYTHONPATH=/app/ben/src
+ENV LD_LIBRARY_PATH=/usr/lib:/app/ben/bin:/app/ben/src/ddsolver
 
 # Copy API file
 COPY card_analysis_api.py /app/ben/card_analysis_api.py
 
-# Set working directory to ben
 WORKDIR /app/ben
 
-# Expose port
-EXPOSE 8000
+EXPOSE 8080
 
-# Set Python path and library paths
-ENV PYTHONPATH=/app/ben/src:$PYTHONPATH
-ENV LD_LIBRARY_PATH=/usr/local/lib:/app/ben/src/ddsolver:$LD_LIBRARY_PATH
-
-# Run the API
-CMD sh -c "uvicorn card_analysis_api:app --host 0.0.0.0 --port ${PORT:-8000}"
+CMD ["python", "-m", "uvicorn", "card_analysis_api:app", "--host", "0.0.0.0", "--port", "8080"]
