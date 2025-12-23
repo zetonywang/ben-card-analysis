@@ -20,13 +20,14 @@ RUN pip install --no-cache-dir \
     colorama \
     configparser
 
-# Set paths
+# Copy API to Ben src directory
+COPY card_analysis_api.py /app/ben/src/card_analysis_api.py
+
+# Set working directory to Ben src
+WORKDIR /app/ben/src
+
+# Set Python path
 ENV PYTHONPATH=/app/ben/src
-
-# Copy API
-COPY card_analysis_api.py /app/ben/card_analysis_api.py
-
-WORKDIR /app/ben
 
 EXPOSE 8080
 

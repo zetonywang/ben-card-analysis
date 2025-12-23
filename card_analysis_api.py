@@ -8,7 +8,19 @@ import sys
 import os
 
 # ============================================================
-# STEP 1: MOCK EVERYTHING BEFORE ANY BEN IMPORTS
+# STEP 1: SET UP PATHS
+# ============================================================
+
+# We should already be in /app/ben/src from Dockerfile
+# But ensure the path is set
+if '/app/ben/src' not in sys.path:
+    sys.path.insert(0, '/app/ben/src')
+
+print(f"Working dir: {os.getcwd()}")
+print(f"Files here: {os.listdir('.')[:5]}...")
+
+# ============================================================
+# STEP 2: MOCK DDS BEFORE ANY BEN IMPORTS
 # ============================================================
 
 class FakeDDS:
@@ -31,10 +43,6 @@ class FakeDDS:
 # Mock the dds module
 sys.modules['dds'] = FakeDDS()
 
-# Set up Ben paths
-sys.path.insert(0, '/app/ben/src')
-os.chdir('/app/ben/src')
-
 # ============================================================
 # STEP 2: PATCH SOURCE FILES
 # ============================================================
@@ -42,8 +50,10 @@ os.chdir('/app/ben/src')
 def patch_files():
     """Patch Ben files to work without DDS/BBA"""
     
+    # We're in /app/ben/src, so paths are relative
+    
     # 1. Replace ddsolver/__init__.py completely
-    dds_init = '/app/ben/src/ddsolver/__init__.py'
+    dds_init = 'ddsolver/__init__.py'
     if os.path.exists(dds_init):
         with open(dds_init, 'w') as f:
             f.write('''
@@ -62,9 +72,9 @@ CalcDDtable = lambda *a: 0
 ''')
     
     # 2. Replace bba/BBA.py completely
-    bba_dir = '/app/ben/src/bba'
-    if os.path.exists(bba_dir):
-        with open(f'{bba_dir}/BBA.py', 'w') as f:
+    bba_file = 'bba/BBA.py'
+    if os.path.exists(bba_file):
+        with open(bba_file, 'w') as f:
             f.write('''
 # Mock BBA - no Windows DLL needed
 class BBA:
@@ -79,7 +89,7 @@ def BBA_PLAYER(*a, **k):
 ''')
     
     # 3. Patch sample.py for aceking safety
-    sample_py = '/app/ben/src/sample.py'
+    sample_py = 'sample.py'
     if os.path.exists(sample_py):
         with open(sample_py, 'r') as f:
             content = f.read()
@@ -101,7 +111,7 @@ def BBA_PLAYER(*a, **k):
             f.write(content)
     
     # 4. Patch botbidder.py for aceking safety
-    botbidder_py = '/app/ben/src/botbidder.py'
+    botbidder_py = 'botbidder.py'
     if os.path.exists(botbidder_py):
         with open(botbidder_py, 'r') as f:
             content = f.read()
@@ -121,7 +131,7 @@ def BBA_PLAYER(*a, **k):
             f.write(content)
     
     # 5. Disable BBA in config
-    config = '/app/ben/src/config/default.conf'
+    config = 'config/default.conf'
     if os.path.exists(config):
         with open(config, 'r') as f:
             content = f.read()
@@ -170,10 +180,10 @@ async def lifespan(app: FastAPI):
         
         from configparser import ConfigParser
         conf = ConfigParser()
-        conf.read('/app/ben/src/config/default.conf')
+        conf.read('config/default.conf')
         
         logger.info("🧠 Loading models...")
-        models = Models.from_conf(conf, '/app/ben/src')
+        models = Models.from_conf(conf, '.')
         logger.info("✅ Models loaded!")
         
     except Exception as e:
