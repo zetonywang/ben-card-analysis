@@ -61,6 +61,12 @@ RUN cp /usr/local/lib/libdds.so /app/ben/src/ddsolver/libdds.so && \
     cp /usr/local/lib/libdds.so /app/ben/src/ddsolver/dds.dll && \
     cp /usr/local/lib/libdds.so /app/ben/libdds.so
 
+# Disable BBA consultation in config (BBA library not available on Linux)
+RUN sed -i 's/consult_bba = True/consult_bba = False/g' /app/ben/src/config/default.conf && \
+    sed -i 's/consult_bba=True/consult_bba=False/g' /app/ben/src/config/default.conf && \
+    echo "" >> /app/ben/src/config/default.conf && \
+    echo "consult_bba = False" >> /app/ben/src/config/default.conf
+
 # Install Python dependencies from Ben
 RUN pip install --no-cache-dir \
     tensorflow==2.17.0 \
