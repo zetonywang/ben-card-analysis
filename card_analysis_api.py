@@ -17,7 +17,6 @@ if '/app/ben/src' not in sys.path:
     sys.path.insert(0, '/app/ben/src')
 
 print(f"Working dir: {os.getcwd()}")
-print(f"Files here: {os.listdir('.')[:5]}...")
 
 # ============================================================
 # STEP 2: MOCK DDS BEFORE ANY BEN IMPORTS
@@ -49,8 +48,6 @@ sys.modules['dds'] = FakeDDS()
 
 def patch_files():
     """Patch Ben files to work without DDS/BBA"""
-    
-    # We're in /app/ben/src, so paths are relative
     
     # 1. Replace ddsolver/__init__.py completely
     dds_init = 'ddsolver/__init__.py'
@@ -174,7 +171,8 @@ async def lifespan(app: FastAPI):
     logger.info("🔄 Loading Ben neural network models...")
     
     try:
-        from nn.models import Models
+        # The file is models_tf2.py, not models.py
+        from nn.models_tf2 import Models
         from analysis import CardByCard as CBC
         CardByCard = CBC
         
