@@ -5,6 +5,7 @@ which is Windows-only and not available on Linux.
 """
 
 import os
+import re
 
 def create_noop_bba():
     """Create a NoOp BBA module that provides dummy implementations"""
@@ -17,8 +18,8 @@ class NoOpBBA:
         pass
     
     def bid_hand(self, *args, **kwargs):
-        """Return empty list - no BBA bid available"""
-        return []
+        """Return empty dict - aceking is a dict structure"""
+        return {}
     
     def explain(self, *args, **kwargs):
         """Return empty explanations"""
@@ -37,7 +38,7 @@ class NoOpBBA:
     
     def items(self):
         """Support .items() calls"""
-        return [].items() if hasattr([], 'items') else iter([])
+        return {}.items()
     
     def keys(self):
         """Support .keys() calls"""
@@ -53,7 +54,7 @@ class NoOpBBA:
     
     def __iter__(self):
         """Support iteration"""
-        return iter([])
+        return iter({})
     
     def __len__(self):
         """Support len()"""
@@ -70,11 +71,8 @@ class NoOpBBA:
     def __getattr__(self, name):
         """Return a no-op function for any undefined method"""
         def noop(*args, **kwargs):
-            # Return empty dict for methods ending in 's' (likely collections)
-            # Return empty list for other methods
-            if name.endswith('s') or name.startswith('get_'):
-                return {}
-            return []
+            # Return empty dict for all methods to be safe
+            return {}
         return noop
 
 # Singleton instance
@@ -204,70 +202,77 @@ def patch_sample_py():
         return
     
     with open(filepath, 'r') as f:
-        lines = f.readlines()
+        content = f.read()
     
-    # Count original occurrences
-    count1 = sum(1 for line in lines if 'aceking' in line)
-    print(f"  Found {count1} lines with 'aceking'")
+    # Add a wrapper function at the top of the file that safely handles aceking
+    wrapper = '''
+# Patch: Ensure aceking is never None
+def _safe_aceking(ak):
+    """Convert None aceking to empty dict"""
+    return ak if ak is not None else {}
+
+'''
     
-    new_lines = []
-    changes = 0
+    # Add wrapper after imports if not already there
+    if '_safe_aceking' not in content:
+        # Find the end of imports
+        lines = content.split('\n')
+        insert_idx = 0
+        for i, line in enumerate(lines):
+            if line.startswith('import ') or line.startswith('from '):
+                insert_idx = i + 1
+            elif line.strip() and not line.startswith('#') and insert_idx > 0:
+                break
+        
+        lines.insert(insert_idx, wrapper)
+        content = '\n'.join(lines)
     
-    for i, line in enumerate(lines):
-        original_line = line
-        
-        # Skip lines already protected
-        if 'aceking or' in line or 'aceking is not None' in line or '(aceking or {})' in line:
-            new_lines.append(line)
-            continue
-        
-        # Case 1: len(aceking)
-        if 'len(aceking)' in line:
-            if 'if ' in line:
-                line = line.replace('if len(aceking)', 'if aceking is not None and len(aceking)')
-            else:
-                line = line.replace('len(aceking)', 'len(aceking or [])')
-            changes += 1
-        
-        # Case 2: aceking.items() - dictionary iteration
-        if 'aceking.items()' in line:
-            line = line.replace('aceking.items()', '(aceking or {}).items()')
-            changes += 1
-        
-        # Case 3: aceking.keys()
-        if 'aceking.keys()' in line:
-            line = line.replace('aceking.keys()', '(aceking or {}).keys()')
-            changes += 1
-        
-        # Case 4: aceking.values()
-        if 'aceking.values()' in line:
-            line = line.replace('aceking.values()', '(aceking or {}).values()')
-            changes += 1
-        
-        # Case 5: aceking[something]
-        if 'aceking[' in line and '(aceking or' not in line:
-            # This is trickier - need to handle subscript access
-            # For now, add a guard at the function level instead
-            pass
-        
-        # Case 6: for x in aceking (list/dict iteration)
-        if 'for ' in line and ' in aceking' in line and ':' in line:
-            line = line.replace(' in aceking:', ' in (aceking or {}):')
-            line = line.replace(' in aceking :', ' in (aceking or {}) :')
-            changes += 1
-        
-        # Case 7: if aceking: (truthy check) - this is fine, no change needed
-        
-        new_lines.append(line)
-        
-        if line != original_line:
-            print(f"  Line {i+1}: Changed aceking usage")
+    # Now replace all aceking usages with _safe_aceking(aceking)
+    # But be careful not to replace the parameter definition
+    
+    # Replace aceking.items() with _safe_aceking(aceking).items()
+    content = content.replace('aceking.items()', '_safe_aceking(aceking).items()')
+    content = content.replace('aceking.keys()', '_safe_aceking(aceking).keys()')
+    content = content.replace('aceking.values()', '_safe_aceking(aceking).values()')
+    
+    # Replace len(aceking) with len(_safe_aceking(aceking))
+    content = content.replace('len(aceking)', 'len(_safe_aceking(aceking))')
+    
+    # Replace aceking[x] with _safe_aceking(aceking)[x] - but this is tricky
+    # Let's use regex for subscript access
+    content = re.sub(r'aceking\[([^\]]+)\]', r'_safe_aceking(aceking)[\1]', content)
+    
+    # Replace "for x in aceking" with "for x in _safe_aceking(aceking)"
+    content = re.sub(r'for (\w+) in aceking:', r'for \1 in _safe_aceking(aceking):', content)
+    content = re.sub(r'for (\w+), (\w+) in aceking', r'for \1, \2 in _safe_aceking(aceking)', content)
     
     with open(filepath, 'w') as f:
-        f.writelines(new_lines)
+        f.write(content)
     
-    print(f"  Made {changes} changes")
-    print(f"Patched {filepath}")
+    print(f"Patched {filepath} with _safe_aceking wrapper")
+
+
+def patch_botbidder_aceking():
+    """Patch botbidder.py to ensure aceking is never None"""
+    filepath = '/app/ben/src/botbidder.py'
+    
+    with open(filepath, 'r') as f:
+        content = f.read()
+    
+    # Find where aceking is assigned and add "or {}"
+    # Common patterns: aceking = something or aceking = self.bbabot.something
+    # Pattern: aceking = <something> (but not aceking = {} or aceking = {something})
+    # Add "or {}" at the end
+    content = re.sub(
+        r'(aceking\s*=\s*)([^{\n][^\n]*?)(\n)',
+        r'\1(\2) or {}\3',
+        content
+    )
+    
+    with open(filepath, 'w') as f:
+        f.write(content)
+    
+    print(f"Patched {filepath} aceking assignments")
 
 
 def patch_config():
@@ -322,21 +327,17 @@ def verify_patches():
     except SyntaxError as e:
         errors.append(f"botbidder.py syntax error: {e}")
     
-    # Check sample.py - verify None check added
+    # Check sample.py - verify _safe_aceking added
     try:
         with open('/app/ben/src/sample.py', 'r') as f:
             content = f.read()
-        
-        # Check for remaining unprotected len(aceking) calls
-        unprotected = content.count('len(aceking)') - content.count('len(aceking or')
-        protected = content.count('aceking or []') + content.count('aceking is not None')
-        
-        if protected > 0:
-            print(f"✅ sample.py patch verified ({protected} guards)")
+        compile(content, 'sample.py', 'exec')
+        if '_safe_aceking' in content:
+            print("✅ sample.py patch verified (_safe_aceking wrapper added)")
         else:
-            errors.append("sample.py patch may not have applied")
-    except Exception as e:
-        errors.append(f"sample.py error: {e}")
+            errors.append("sample.py: _safe_aceking not found")
+    except SyntaxError as e:
+        errors.append(f"sample.py syntax error: {e}")
     
     if errors:
         print("❌ Errors:", errors)
@@ -349,6 +350,7 @@ if __name__ == '__main__':
     create_noop_bba()
     patch_bba_py()
     patch_botbidder_py()
+    patch_botbidder_aceking()
     patch_sample_py()
     patch_config()
     if verify_patches():
