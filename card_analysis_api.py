@@ -50,47 +50,50 @@ print(f"Working dir: {os.getcwd()}")
 # STEP 2: MOCK DDS AND DDSOLVER BEFORE ANY BEN IMPORTS
 # ============================================================
 
-class FakeDDS:
-    """Fake DDS that does nothing"""
-    __file__ = "/fake/dds"
-    __path__ = ["/fake/dds"]
-    
-    def SetMaxThreads(self, *a): pass
-    def SetThreading(self, *a): pass  
-    def SetResources(self, *a): pass
-    def FreeMemory(self, *a): pass
-    def SolveBoard(self, *a): return 0
-    def CalcDDtable(self, *a): return 0
-    
+import types
+
+# Create a proper mock module for ddsolver
+fake_ddsolver = types.ModuleType('ddsolver')
+fake_ddsolver.__file__ = '/fake/ddsolver/__init__.py'
+fake_ddsolver.__path__ = ['/fake/ddsolver']
+
+# Create a mock dds object
+class MockDDS:
     def __getattr__(self, name):
         def noop(*args, **kwargs):
             return 0
         return noop
 
-class FakeDDSolver:
-    """Fake ddsolver module"""
-    __file__ = "/fake/ddsolver"
-    __path__ = ["/fake/ddsolver"]
-    
-    dds = FakeDDS()
-    
-    def SetMaxThreads(self, *a): pass
-    def SetThreading(self, *a): pass
-    def SetResources(self, *a): pass
-    def FreeMemory(self, *a): pass
-    def SolveBoard(self, *a): return 0
-    def CalcDDtable(self, *a): return 0
-    def CalcDDtablePBN(self, *a): return 0
-    
-    def __getattr__(self, name):
-        def noop(*args, **kwargs):
-            return 0
-        return noop
+fake_ddsolver.dds = MockDDS()
 
-# Mock BOTH modules in sys.modules BEFORE any Ben imports
-fake_dds = FakeDDS()
-fake_ddsolver = FakeDDSolver()
+# Add all expected functions to the module
+def _noop(*args, **kwargs):
+    return 0
 
+fake_ddsolver.SetMaxThreads = _noop
+fake_ddsolver.SetThreading = _noop
+fake_ddsolver.SetResources = _noop
+fake_ddsolver.FreeMemory = _noop
+fake_ddsolver.SolveBoard = _noop
+fake_ddsolver.SolveBoardPBN = _noop
+fake_ddsolver.CalcDDtable = _noop
+fake_ddsolver.CalcDDtablePBN = _noop
+fake_ddsolver.CalcAllTables = _noop
+fake_ddsolver.CalcAllTablesPBN = _noop
+fake_ddsolver.SolveAllBoards = _noop
+fake_ddsolver.Par = _noop
+fake_ddsolver.CalcPar = _noop
+fake_ddsolver.AnalysePlayBin = _noop
+fake_ddsolver.AnalysePlayPBN = _noop
+
+# Also create a fake dds module
+fake_dds = types.ModuleType('dds')
+fake_dds.__file__ = '/fake/dds/__init__.py'
+for name in ['SetMaxThreads', 'SetThreading', 'SetResources', 'FreeMemory', 
+             'SolveBoard', 'CalcDDtable', 'CalcDDtablePBN']:
+    setattr(fake_dds, name, _noop)
+
+# Install mocks in sys.modules BEFORE any Ben imports
 sys.modules['dds'] = fake_dds
 sys.modules['ddsolver'] = fake_ddsolver
 sys.modules['ddsolver.dds'] = fake_dds
@@ -104,52 +107,10 @@ print("Mocked dds and ddsolver modules")
 def patch_files():
     """Patch Ben files to work without DDS/BBA"""
     
-    # 1. Replace ddsolver/__init__.py completely - NO library loading
-    dds_init = 'ddsolver/__init__.py'
-    if os.path.exists(dds_init):
-        with open(dds_init, 'w') as f:
-            f.write('''
-# Mock DDS - no library loading at all
-import ctypes
-
-class MockDDS:
-    """Mock DDS that does nothing"""
-    def __init__(self):
-        pass
+    # NOTE: We do NOT patch ddsolver/__init__.py - we rely on sys.modules mock instead
+    # This avoids issues with import order and module loading
     
-    def __getattr__(self, name):
-        def noop(*args, **kwargs):
-            return 0
-        return noop
-
-# Create mock instance - DO NOT load any .so file
-dds = MockDDS()
-
-# Export all expected functions as no-ops
-def SetMaxThreads(*a, **k): pass
-def SetThreading(*a, **k): pass
-def SetResources(*a, **k): pass
-def FreeMemory(*a, **k): pass
-def SolveBoard(*a, **k): return 0
-def SolveBoardPBN(*a, **k): return 0
-def CalcDDtable(*a, **k): return 0
-def CalcDDtablePBN(*a, **k): return 0
-def CalcAllTables(*a, **k): return 0
-def CalcAllTablesPBN(*a, **k): return 0
-def SolveAllBoards(*a, **k): return 0
-def Par(*a, **k): return 0
-def CalcPar(*a, **k): return 0
-def AnalysePlayBin(*a, **k): return 0
-def AnalysePlayPBN(*a, **k): return 0
-
-# Prevent any ctypes loading
-original_cdll = ctypes.CDLL
-def fake_cdll(*args, **kwargs):
-    return MockDDS()
-ctypes.CDLL = fake_cdll
-''')
-    
-    # 2. Replace bba/BBA.py completely
+    # 1. Replace bba/BBA.py completely
     bba_file = 'bba/BBA.py'
     if os.path.exists(bba_file):
         with open(bba_file, 'w') as f:
@@ -166,7 +127,7 @@ def BBA_PLAYER(*a, **k):
     return BBA()
 ''')
     
-    # 3. Patch sample.py for aceking safety AND disable dds imports
+    # 3. Patch sample.py for aceking safety (but DON'T comment out imports - let them use mock)
     sample_py = 'sample.py'
     if os.path.exists(sample_py):
         with open(sample_py, 'r') as f:
@@ -174,17 +135,12 @@ def BBA_PLAYER(*a, **k):
         
         new_lines = []
         for line in lines:
-            # Comment out ddsolver imports
-            if 'import ddsolver' in line or 'from ddsolver' in line:
-                new_lines.append('# ' + line)
-                continue
-            
             # Skip function definitions - don't modify parameter names
             if 'def ' in line:
                 new_lines.append(line)
                 continue
             
-            # Only modify non-def lines
+            # Only modify non-def lines for aceking safety
             line = line.replace('aceking.items()', '(aceking or {}).items()')
             line = line.replace('aceking.keys()', '(aceking or {}).keys()')
             line = line.replace('aceking.values()', '(aceking or {}).values()')
@@ -205,11 +161,6 @@ def BBA_PLAYER(*a, **k):
         
         new_lines = []
         for line in lines:
-            # Comment out ddsolver imports
-            if 'import ddsolver' in line or 'from ddsolver' in line:
-                new_lines.append('# ' + line)
-                continue
-                
             # Skip function definitions
             if 'def ' in line:
                 new_lines.append(line)
@@ -223,15 +174,7 @@ def BBA_PLAYER(*a, **k):
         with open(botbidder_py, 'w') as f:
             f.writelines(new_lines)
     
-    # 4b. Patch analysis.py to comment out ddsolver
-    analysis_py = 'analysis.py'
-    if os.path.exists(analysis_py):
-        with open(analysis_py, 'r') as f:
-            content = f.read()
-        content = content.replace('import ddsolver', '# import ddsolver')
-        content = content.replace('from ddsolver', '# from ddsolver')
-        with open(analysis_py, 'w') as f:
-            f.write(content)
+    # NOTE: We don't comment out ddsolver imports - they will use our mock from sys.modules
     
     # 5. Disable BBA in config
     config = 'config/default.conf'
@@ -242,26 +185,7 @@ def BBA_PLAYER(*a, **k):
         with open(config, 'a') as f:
             f.write('\nconsult_bba = False\n')
     
-    # 6. Patch pimc files to disable DDS
-    pimc_init = 'pimc/__init__.py'
-    if os.path.exists(pimc_init):
-        with open(pimc_init, 'r') as f:
-            content = f.read()
-        content = content.replace('import ddsolver', '# import ddsolver')
-        content = content.replace('from ddsolver', '# from ddsolver')
-        with open(pimc_init, 'w') as f:
-            f.write(content)
-    
-    # 7. Patch any other files that might import ddsolver
-    for filename in ['calculate.py', 'claim.py', 'game.py', 'gameapi.py']:
-        if os.path.exists(filename):
-            with open(filename, 'r') as f:
-                content = f.read()
-            if 'ddsolver' in content:
-                content = content.replace('import ddsolver', '# import ddsolver')
-                content = content.replace('from ddsolver', '# from ddsolver')
-                with open(filename, 'w') as f:
-                    f.write(content)
+    # NOTE: All ddsolver imports will use our mock from sys.modules - no need to comment them out
 
 print("Patching Ben files...")
 patch_files()
