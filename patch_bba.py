@@ -17,8 +17,8 @@ class NoOpBBA:
         pass
     
     def bid_hand(self, *args, **kwargs):
-        """Return None - no BBA bid available"""
-        return None
+        """Return empty list - no BBA bid available"""
+        return []
     
     def explain(self, *args, **kwargs):
         """Return empty explanations"""
@@ -27,10 +27,54 @@ class NoOpBBA:
     def get_bid(self, *args, **kwargs):
         return None
     
+    def get_explanations(self, *args, **kwargs):
+        """Return empty dict for explanations"""
+        return {}
+    
+    def get_info(self, *args, **kwargs):
+        """Return empty dict for info"""
+        return {}
+    
+    def items(self):
+        """Support .items() calls"""
+        return [].items() if hasattr([], 'items') else iter([])
+    
+    def keys(self):
+        """Support .keys() calls"""
+        return {}.keys()
+    
+    def values(self):
+        """Support .values() calls"""
+        return {}.values()
+    
+    def get(self, key, default=None):
+        """Support .get() calls"""
+        return default
+    
+    def __iter__(self):
+        """Support iteration"""
+        return iter([])
+    
+    def __len__(self):
+        """Support len()"""
+        return 0
+    
+    def __bool__(self):
+        """Evaluate to False"""
+        return False
+    
+    def __getitem__(self, key):
+        """Support indexing - return None or raise KeyError"""
+        return None
+    
     def __getattr__(self, name):
         """Return a no-op function for any undefined method"""
         def noop(*args, **kwargs):
-            return None
+            # Return empty dict for methods ending in 's' (likely collections)
+            # Return empty list for other methods
+            if name.endswith('s') or name.startswith('get_'):
+                return {}
+            return []
         return noop
 
 # Singleton instance
@@ -115,8 +159,38 @@ def patch_botbidder_py():
         new_lines.append(line)
         i += 1
     
+    # Now do additional replacements for None handling
+    content = ''.join(new_lines)
+    
+    # Handle patterns where .items() is called on potentially None results
+    # Pattern: for k, v in something.items():
+    # If something could be None, we need to protect it
+    
+    # Handle common BBA result patterns
+    # explanations.items() where explanations might be None
+    content = content.replace(
+        'explanations.items()',
+        '(explanations or {}).items()'
+    )
+    
+    # Handle any .items() call on a variable that might be None from BBA
+    # Common variables: explanations, bba_result, bid_info, etc.
+    for var in ['explanations', 'bba_result', 'bid_info', 'result', 'info']:
+        content = content.replace(
+            f'{var}.items()',
+            f'({var} or {{}}).items()'
+        )
+        content = content.replace(
+            f'{var}.keys()',
+            f'({var} or {{}}).keys()'
+        )
+        content = content.replace(
+            f'{var}.values()',
+            f'({var} or {{}}).values()'
+        )
+    
     with open(filepath, 'w') as f:
-        f.writelines(new_lines)
+        f.write(content)
     
     print(f"Patched {filepath}")
 
@@ -133,8 +207,8 @@ def patch_sample_py():
         lines = f.readlines()
     
     # Count original occurrences
-    count1 = sum(1 for line in lines if 'len(aceking)' in line)
-    print(f"  Found {count1} lines with 'len(aceking)'")
+    count1 = sum(1 for line in lines if 'aceking' in line)
+    print(f"  Found {count1} lines with 'aceking'")
     
     new_lines = []
     changes = 0
@@ -142,27 +216,52 @@ def patch_sample_py():
     for i, line in enumerate(lines):
         original_line = line
         
-        # Check if line contains len(aceking) without protection
-        if 'len(aceking)' in line and 'aceking or' not in line and 'aceking is not None' not in line:
-            # Case 1: if statement with len(aceking)
-            if 'if ' in line and 'len(aceking)' in line:
-                # Add None check before the len() call
+        # Skip lines already protected
+        if 'aceking or' in line or 'aceking is not None' in line or '(aceking or {})' in line:
+            new_lines.append(line)
+            continue
+        
+        # Case 1: len(aceking)
+        if 'len(aceking)' in line:
+            if 'if ' in line:
                 line = line.replace('if len(aceking)', 'if aceking is not None and len(aceking)')
-                changes += 1
-            # Case 2: just len(aceking) anywhere else (not in if)
             else:
                 line = line.replace('len(aceking)', 'len(aceking or [])')
-                changes += 1
-        
-        # Also handle for loops with aceking
-        if 'for ' in line and ' in aceking' in line and 'aceking or' not in line:
-            line = line.replace(' in aceking', ' in (aceking or [])')
             changes += 1
+        
+        # Case 2: aceking.items() - dictionary iteration
+        if 'aceking.items()' in line:
+            line = line.replace('aceking.items()', '(aceking or {}).items()')
+            changes += 1
+        
+        # Case 3: aceking.keys()
+        if 'aceking.keys()' in line:
+            line = line.replace('aceking.keys()', '(aceking or {}).keys()')
+            changes += 1
+        
+        # Case 4: aceking.values()
+        if 'aceking.values()' in line:
+            line = line.replace('aceking.values()', '(aceking or {}).values()')
+            changes += 1
+        
+        # Case 5: aceking[something]
+        if 'aceking[' in line and '(aceking or' not in line:
+            # This is trickier - need to handle subscript access
+            # For now, add a guard at the function level instead
+            pass
+        
+        # Case 6: for x in aceking (list/dict iteration)
+        if 'for ' in line and ' in aceking' in line and ':' in line:
+            line = line.replace(' in aceking:', ' in (aceking or {}):')
+            line = line.replace(' in aceking :', ' in (aceking or {}) :')
+            changes += 1
+        
+        # Case 7: if aceking: (truthy check) - this is fine, no change needed
         
         new_lines.append(line)
         
         if line != original_line:
-            print(f"  Line {i+1}: {original_line.strip()[:60]}...")
+            print(f"  Line {i+1}: Changed aceking usage")
     
     with open(filepath, 'w') as f:
         f.writelines(new_lines)
