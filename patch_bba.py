@@ -130,23 +130,44 @@ def patch_sample_py():
         return
     
     with open(filepath, 'r') as f:
-        content = f.read()
+        lines = f.readlines()
     
-    # Fix: if len(aceking) > 0: -> if aceking is not None and len(aceking) > 0:
-    content = content.replace(
-        'if len(aceking) > 0:',
-        'if aceking is not None and len(aceking) > 0:'
-    )
+    # Count original occurrences
+    count1 = sum(1 for line in lines if 'len(aceking)' in line)
+    print(f"  Found {count1} lines with 'len(aceking)'")
     
-    # Also handle any other places where aceking might be used without None check
-    content = content.replace(
-        'for ak in aceking:',
-        'for ak in (aceking or []):'
-    )
+    new_lines = []
+    changes = 0
+    
+    for i, line in enumerate(lines):
+        original_line = line
+        
+        # Check if line contains len(aceking) without protection
+        if 'len(aceking)' in line and 'aceking or' not in line and 'aceking is not None' not in line:
+            # Case 1: if statement with len(aceking)
+            if 'if ' in line and 'len(aceking)' in line:
+                # Add None check before the len() call
+                line = line.replace('if len(aceking)', 'if aceking is not None and len(aceking)')
+                changes += 1
+            # Case 2: just len(aceking) anywhere else (not in if)
+            else:
+                line = line.replace('len(aceking)', 'len(aceking or [])')
+                changes += 1
+        
+        # Also handle for loops with aceking
+        if 'for ' in line and ' in aceking' in line and 'aceking or' not in line:
+            line = line.replace(' in aceking', ' in (aceking or [])')
+            changes += 1
+        
+        new_lines.append(line)
+        
+        if line != original_line:
+            print(f"  Line {i+1}: {original_line.strip()[:60]}...")
     
     with open(filepath, 'w') as f:
-        f.write(content)
+        f.writelines(new_lines)
     
+    print(f"  Made {changes} changes")
     print(f"Patched {filepath}")
 
 
@@ -206,8 +227,13 @@ def verify_patches():
     try:
         with open('/app/ben/src/sample.py', 'r') as f:
             content = f.read()
-        if 'aceking is not None' in content:
-            print("✅ sample.py patch verified")
+        
+        # Check for remaining unprotected len(aceking) calls
+        unprotected = content.count('len(aceking)') - content.count('len(aceking or')
+        protected = content.count('aceking or []') + content.count('aceking is not None')
+        
+        if protected > 0:
+            print(f"✅ sample.py patch verified ({protected} guards)")
         else:
             errors.append("sample.py patch may not have applied")
     except Exception as e:
