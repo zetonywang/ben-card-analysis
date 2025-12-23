@@ -121,6 +121,35 @@ def patch_botbidder_py():
     print(f"Patched {filepath}")
 
 
+def patch_sample_py():
+    """Patch sample.py to handle None values from BBA"""
+    filepath = '/app/ben/src/sample.py'
+    
+    if not os.path.exists(filepath):
+        print(f"Skipping {filepath} - file not found")
+        return
+    
+    with open(filepath, 'r') as f:
+        content = f.read()
+    
+    # Fix: if len(aceking) > 0: -> if aceking is not None and len(aceking) > 0:
+    content = content.replace(
+        'if len(aceking) > 0:',
+        'if aceking is not None and len(aceking) > 0:'
+    )
+    
+    # Also handle any other places where aceking might be used without None check
+    content = content.replace(
+        'for ak in aceking:',
+        'for ak in (aceking or []):'
+    )
+    
+    with open(filepath, 'w') as f:
+        f.write(content)
+    
+    print(f"Patched {filepath}")
+
+
 def patch_config():
     """Ensure consult_bba is False in config"""
     filepath = '/app/ben/src/config/default.conf'
@@ -173,6 +202,17 @@ def verify_patches():
     except SyntaxError as e:
         errors.append(f"botbidder.py syntax error: {e}")
     
+    # Check sample.py - verify None check added
+    try:
+        with open('/app/ben/src/sample.py', 'r') as f:
+            content = f.read()
+        if 'aceking is not None' in content:
+            print("✅ sample.py patch verified")
+        else:
+            errors.append("sample.py patch may not have applied")
+    except Exception as e:
+        errors.append(f"sample.py error: {e}")
+    
     if errors:
         print("❌ Errors:", errors)
         return False
@@ -184,6 +224,7 @@ if __name__ == '__main__':
     create_noop_bba()
     patch_bba_py()
     patch_botbidder_py()
+    patch_sample_py()
     patch_config()
     if verify_patches():
         print("✅ All patches applied successfully!")
