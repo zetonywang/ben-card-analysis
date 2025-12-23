@@ -162,6 +162,7 @@ logger = logging.getLogger(__name__)
 # Global state
 models = None
 CardByCard = None
+sampler = None
 
 class AnalysisRequest(BaseModel):
     dealer: str
@@ -172,13 +173,15 @@ class AnalysisRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global models, CardByCard
+    global models, CardByCard, sampler
     logger.info("🔄 Loading Ben neural network models...")
     
     try:
         # The file is models_tf2.py, not models.py
         from nn.models_tf2 import Models
         from analysis import CardByCard as CBC
+        from sample import Sample
+        
         CardByCard = CBC
         
         from configparser import ConfigParser
@@ -187,6 +190,10 @@ async def lifespan(app: FastAPI):
         
         logger.info("🧠 Loading models...")
         models = Models.from_conf(conf, '..')  # Models are in /app/ben/models, we're in /app/ben/src
+        
+        # Create sampler
+        sampler = Sample.from_conf(conf, '..')
+        
         logger.info("✅ Models loaded!")
         
     except Exception as e:
@@ -225,7 +232,9 @@ async def analyze(request: AnalysisRequest):
             hands=request.hands,
             auction=request.auction,
             play=request.play or [],
-            models=models
+            models=models,
+            sampler=sampler,
+            verbose=False
         )
         
         # Run analysis in thread pool
