@@ -26,6 +26,7 @@ RUN pip install --no-cache-dir \
     websockets \
     pydantic \
     tqdm \
+    colorama \
     --break-system-packages
 
 # Create stub DDS library with all 32 functions
