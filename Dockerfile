@@ -2,11 +2,14 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install git only
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# Install git and git-lfs
+RUN apt-get update && apt-get install -y git git-lfs && rm -rf /var/lib/apt/lists/*
 
-# Clone Ben
-RUN git clone https://github.com/lorserker/ben.git
+# Clone Ben and pull LFS files (the .keras models)
+RUN git lfs install && \
+    git clone https://github.com/lorserker/ben.git && \
+    cd ben && \
+    git lfs pull
 
 # Install Python dependencies
 RUN pip install --no-cache-dir \

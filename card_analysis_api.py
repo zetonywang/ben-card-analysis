@@ -186,7 +186,7 @@ async def lifespan(app: FastAPI):
         conf.read('config/default.conf')
         
         logger.info("🧠 Loading models...")
-        models = Models.from_conf(conf, '.')
+        models = Models.from_conf(conf, '..')  # Models are in /app/ben/models, we're in /app/ben/src
         logger.info("✅ Models loaded!")
         
     except Exception as e:
