@@ -5,12 +5,10 @@ which is Windows-only and not available on Linux.
 """
 
 import os
-import re
 
 def create_noop_bba():
     """Create a NoOp BBA module that provides dummy implementations"""
-    noop_code = '''
-# NoOp BBA - provides dummy implementations when BBA library is not available
+    noop_code = '''# NoOp BBA - provides dummy implementations when BBA library is not available
 
 class NoOpBBA:
     """A no-op BBA that returns empty/neutral values for all methods"""
@@ -18,11 +16,11 @@ class NoOpBBA:
     def __init__(self, *args, **kwargs):
         pass
     
-    def bid_hand(self, auction):
+    def bid_hand(self, *args, **kwargs):
         """Return None - no BBA bid available"""
         return None
     
-    def explain(self, auction):
+    def explain(self, *args, **kwargs):
         """Return empty explanations"""
         return [], False, False
     
@@ -38,7 +36,7 @@ class NoOpBBA:
 # Singleton instance
 _noop_instance = None
 
-def get_noop_bba():
+def get_noop_bba(*args, **kwargs):
     global _noop_instance
     if _noop_instance is None:
         _noop_instance = NoOpBBA()
@@ -59,9 +57,8 @@ def patch_bba_py():
     with open(filepath, 'r') as f:
         content = f.read()
     
-    # Add import for NoOpBBA at the top
+    # Add import for NoOpBBA at the very top
     if 'from bba.noop_bba import' not in content:
-        # Find the imports section and add our import
         content = 'from bba.noop_bba import get_noop_bba, NoOpBBA\n' + content
     
     # Replace the RuntimeError raise with return NoOpBBA
@@ -81,45 +78,52 @@ def patch_botbidder_py():
     filepath = '/app/ben/src/botbidder.py'
     
     with open(filepath, 'r') as f:
-        content = f.read()
+        lines = f.readlines()
     
-    # Add import for NoOpBBA
-    if 'from bba.noop_bba import' not in content:
-        # Add import after existing imports
-        import_line = 'from bba.noop_bba import get_noop_bba, NoOpBBA\n'
-        # Find a good place to insert - after other bba imports
-        if 'from bba.' in content:
-            content = content.replace('from bba.', import_line + 'from bba.', 1)
-        else:
-            # Just add at the top after other imports
-            lines = content.split('\n')
-            for i, line in enumerate(lines):
-                if line.startswith('import ') or line.startswith('from '):
-                    continue
-                else:
-                    lines.insert(i, import_line)
-                    break
-            content = '\n'.join(lines)
+    new_lines = []
+    i = 0
     
-    # 1. Add a guard at the top of the bbabot property to return NoOpBBA if consult_bba is False
-    old_def = 'def bbabot(self):'
-    new_def = '''def bbabot(self):
-        # Skip BBA if not configured or not available - return NoOpBBA
-        if hasattr(self, 'models') and hasattr(self.models, 'consult_bba'):
-            if not self.models.consult_bba:
-                return get_noop_bba()'''
+    # Add import at the top (after other imports)
+    import_added = False
     
-    content = content.replace(old_def, new_def, 1)
+    while i < len(lines):
+        line = lines[i]
+        
+        # Add our import after the last 'from' or 'import' line at the top
+        if not import_added and line.strip() and not line.startswith('import ') and not line.startswith('from ') and not line.startswith('#'):
+            new_lines.append('from bba.noop_bba import get_noop_bba\n')
+            import_added = True
+        
+        # Find the bbabot property and add guard
+        if line.strip() == 'def bbabot(self):':
+            new_lines.append(line)
+            i += 1
+            # Add our guard right after the def line
+            # Find the indentation of the next line
+            if i < len(lines):
+                next_line = lines[i]
+                # Get the indentation
+                indent = len(next_line) - len(next_line.lstrip())
+                indent_str = ' ' * indent
+                # Add our guard code with proper indentation
+                new_lines.append(f'{indent_str}# Return NoOpBBA if BBA is not available\n')
+                new_lines.append(f'{indent_str}if hasattr(self, "models") and hasattr(self.models, "consult_bba"):\n')
+                new_lines.append(f'{indent_str}    if not self.models.consult_bba:\n')
+                new_lines.append(f'{indent_str}        return get_noop_bba()\n')
+            continue
+        
+        new_lines.append(line)
+        i += 1
     
     with open(filepath, 'w') as f:
-        f.write(content)
+        f.writelines(new_lines)
     
     print(f"Patched {filepath}")
 
 
 def patch_config():
-    """Ensure consult_bba is False in the Models class default"""
-    filepath = '/app/ben/src/nn/models.py'
+    """Ensure consult_bba is False in config"""
+    filepath = '/app/ben/src/config/default.conf'
     
     if not os.path.exists(filepath):
         print(f"Skipping {filepath} - file not found")
@@ -132,6 +136,10 @@ def patch_config():
     content = content.replace('consult_bba = True', 'consult_bba = False')
     content = content.replace('consult_bba=True', 'consult_bba=False')
     
+    # Also add it explicitly at the end
+    if 'consult_bba' not in content:
+        content += '\nconsult_bba = False\n'
+    
     with open(filepath, 'w') as f:
         f.write(content)
     
@@ -140,11 +148,13 @@ def patch_config():
 
 def verify_patches():
     """Verify the patches were applied"""
+    errors = []
+    
     # Check noop_bba.py exists
     if os.path.exists('/app/ben/src/bba/noop_bba.py'):
         print("✅ noop_bba.py created")
     else:
-        print("⚠️ noop_bba.py not found")
+        errors.append("noop_bba.py not found")
     
     # Check BBA.py
     with open('/app/ben/src/bba/BBA.py', 'r') as f:
@@ -152,15 +162,21 @@ def verify_patches():
     if 'NoOpBBA' in content:
         print("✅ BBA.py patch verified")
     else:
-        print("⚠️ BBA.py patch may not have applied correctly")
+        errors.append("BBA.py patch failed")
     
-    # Check botbidder.py  
-    with open('/app/ben/src/botbidder.py', 'r') as f:
-        content = f.read()
-    if 'get_noop_bba' in content or 'consult_bba' in content:
-        print("✅ botbidder.py patch verified")
-    else:
-        print("⚠️ botbidder.py patch may not have applied correctly")
+    # Check botbidder.py - verify no syntax errors
+    try:
+        with open('/app/ben/src/botbidder.py', 'r') as f:
+            content = f.read()
+        compile(content, 'botbidder.py', 'exec')
+        print("✅ botbidder.py syntax OK")
+    except SyntaxError as e:
+        errors.append(f"botbidder.py syntax error: {e}")
+    
+    if errors:
+        print("❌ Errors:", errors)
+        return False
+    return True
 
 
 if __name__ == '__main__':
@@ -169,5 +185,9 @@ if __name__ == '__main__':
     patch_bba_py()
     patch_botbidder_py()
     patch_config()
-    verify_patches()
+    if verify_patches():
+        print("✅ All patches applied successfully!")
+    else:
+        print("❌ Some patches failed!")
     print("Done!")
+
