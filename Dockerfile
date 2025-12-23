@@ -56,6 +56,11 @@ RUN git clone https://github.com/lorserker/ben.git && \
     cd ben && \
     git lfs pull
 
+# Copy stub library to Ben's ddsolver directory where it looks for it
+RUN cp /usr/local/lib/libdds.so /app/ben/src/ddsolver/libdds.so && \
+    cp /usr/local/lib/libdds.so /app/ben/src/ddsolver/dds.dll && \
+    cp /usr/local/lib/libdds.so /app/ben/libdds.so
+
 # Install Python dependencies from Ben
 RUN pip install --no-cache-dir \
     tensorflow==2.17.0 \
@@ -79,8 +84,9 @@ WORKDIR /app/ben
 # Expose port
 EXPOSE 8000
 
-# Set Python path
+# Set Python path and library paths
 ENV PYTHONPATH=/app/ben/src:$PYTHONPATH
+ENV LD_LIBRARY_PATH=/usr/local/lib:/app/ben/src/ddsolver:$LD_LIBRARY_PATH
 
 # Run the API
 CMD sh -c "uvicorn card_analysis_api:app --host 0.0.0.0 --port ${PORT:-8000}"
